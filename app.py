@@ -1,34 +1,14 @@
-from flask import Flask, render_template, request, redirect, url_for, session
-from werkzeug.security import check_password_hash
-import mysql.connector
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file
+from werkzeug.security import generate_password_hash, check_password_hash   # <-- solo por si más adelante quieres mezclar ambos
+from utils.db import get_connection
+from io import BytesIO
+from datetime import datetime
+import hashlib   # <-- NUEVO: para validar PASSWORD() de MySQL
 
 app = Flask(__name__)
-app.secret_key = 'cambia_por_algo_seguro'
+app.secret_key = 'cambia_esto_por_algo_seguro'
 
-# ---------- CONFIG DB ----------
-DB = {
-    'host': '172.31.176.1',
-    'user': 'app_user',
-    'password': 'App1234!',
-    'database': 'sistemaventa'
-}
-
-def get_conn():
-    return mysql.connector.connect(**DB)
-
-# ---------- VALIDACIONES ----------
-def validar_credenciales(usuario, password):
-    if not usuario or not password:
-        return False, "Campos vacíos"
-    if usuario.lower() in password.lower():
-        return False, "La contraseña no debe contener el usuario"
-    if len(password) < 8:
-        return False, "Mínimo 8 caracteres"
-    if not any(c.isalpha() for c in password) or not any(c.isdigit() for c in password):
-        return False, "Debe ser alfanumérica"
-    return True, ""
-
-# ---------- RUTAS ----------
+# ---------- LOGIN ----------
 @app.route('/')
 def index():
     return redirect(url_for('login'))
@@ -36,40 +16,193 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        usuario = request.form.get('usuario', '').strip()
-        password = request.form.get('password', '').strip()
+        usuario = request.form['usuario'].strip()
+        password = request.form['password'].strip()
 
-        ok, msg = validar_credenciales(usuario, password)
-        if not ok:
-            return render_template('login.html', error=msg)
+        if not usuario or not password:
+            flash('Completa todos los campos', 'warning')
+            return render_template('login.html')
 
-        conn = get_conn()
-        cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM usuarios WHERE correo = %s", (usuario,))
-        user = cur.fetchone()
-        cur.close()
+        conn = get_connection()
+        if not conn:
+            flash('Error de conexión', 'danger')
+            return render_template('login.html')
+
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM usuarios WHERE correo = %s", (usuario,))
+        user = cursor.fetchone()
+        cursor.close()
         conn.close()
 
-#        if user and check_password_hash(user['pass'], password):
-        if user and (user['pass'] == password or check_password_hash(user['pass'], password)):
+        # 🔐 COMPARACIÓN CON PASSWORD() DE MYSQL (sin texto plano)
+        if user and user['pass'] == mysql_password(password):
             session['user_id'] = user['id']
             session['user_name'] = user['nombre']
-            return redirect(url_for('construccion'))
+            return redirect(url_for('sistema', tab='nueva_venta'))
         else:
-            return render_template('login.html', error="Credenciales incorrectas")
+            flash('Credenciales incorrectas', 'danger')
 
     return render_template('login.html')
 
-@app.route('/construccion')
-def construccion():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    return render_template('construccion.html')
+# ---------- FUNCIÓN AUXILIAR: calcula el mismo hash que PASSWORD() de MySQL ----------
+def mysql_password(raw: str) -> str:
+    """Devuelve el mismo hash que MySQL PASSWORD('texto')"""
+    return "*" + hashlib.sha1(hashlib.sha1(raw.encode()).digest()).hexdigest().upper()
 
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
 
+# ---------- SISTEMA (PESTAÑAS) ----------
+@app.route('/sistema')
+def sistema():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    tab = request.args.get('tab', 'nueva_venta')
+    return render_template('sistema/index.html', tab=tab)
+
+# ---------- NUEVA VENTA ----------
+@app.route('/sistema/nueva_venta')
+def nueva_venta():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT p.codigo, p.descripcion, p.cantidad, p.precio FROM productos p")
+    productos = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('sistema/nueva_venta.html', productos=productos)
+
+# ---------- CLIENTES ----------
+@app.route('/sistema/clientes')
+def clientes():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM clientes")
+    data = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('sistema/clientes.html', clientes=data)
+
+@app.route('/sistema/clientes/agregar', methods=['POST'])
+def agregar_cliente():
+    dni = request.form['dni']
+    nombre = request.form['nombre']
+    telefono = request.form['telefono']
+    direccion = request.form['direccion']
+    razon = request.form['razon']
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO clientes (dni, nombre, telefono, direccion, razon) VALUES (%s,%s,%s,%s,%s)",
+                   (dni, nombre, telefono, direccion, razon))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    flash('Cliente agregado', 'success')
+    return redirect(url_for('clientes'))
+
+@app.route('/sistema/clientes/eliminar/<int:id>')
+def eliminar_cliente(id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM clientes WHERE id=%s", (id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    flash('Cliente eliminado', 'info')
+    return redirect(url_for('clientes'))
+
+# ---------- PROVEEDORES ----------
+@app.route('/sistema/proveedores')
+def proveedores():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM proveedor")
+    data = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('sistema/proveedores.html', proveedores=data)
+
+@app.route('/sistema/proveedores/agregar', methods=['POST'])
+def agregar_proveedor():
+    ruc = request.form['ruc']
+    nombre = request.form['nombre']
+    telefono = request.form['telefono']
+    direccion = request.form['direccion']
+    razon = request.form['razon']
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO proveedor (ruc, nombre, telefono, direccion, razon) VALUES (%s,%s,%s,%s,%s)",
+                   (ruc, nombre, telefono, direccion, razon))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    flash('Proveedor agregado', 'success')
+    return redirect(url_for('proveedores'))
+
+# ---------- PRODUCTOS ----------
+@app.route('/sistema/productos')
+def productos():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT p.*, pr.nombre AS proveedor FROM productos p JOIN proveedor pr ON p.id_proveedor = pr.id")
+    data = cursor.fetchall()
+    cursor.execute("SELECT * FROM proveedor")
+    provs = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('sistema/productos.html', productos=data, proveedores=provs)
+
+@app.route('/sistema/productos/agregar', methods=['POST'])
+def agregar_producto():
+    codigo = request.form['codigo']
+    descripcion = request.form['descripcion']
+    cantidad = request.form['cantidad']
+    precio = request.form['precio']
+    id_proveedor = request.form['proveedor']
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO productos (codigo, descripcion, cantidad, precio, id_proveedor) VALUES (%s,%s,%s,%s,%s)",
+                   (codigo, descripcion, cantidad, precio, id_proveedor))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    flash('Producto agregado', 'success')
+    return redirect(url_for('productos'))
+
+# ---------- VENTAS ----------
+@app.route('/sistema/ventas')
+def ventas():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT v.id, c.nombre AS cliente, v.total, v.fecha FROM ventas v JOIN clientes c ON v.id_cliente = c.id")
+    data = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('sistema/ventas.html', ventas=data)
+
+# ---------- REPORTES ----------
+@app.route('/sistema/reportes')
+def reportes():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT v.id, c.nombre AS cliente, v.total, v.fecha FROM ventas v JOIN clientes c ON v.id_cliente = c.id")
+    data = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('sistema/reportes.html', ventas=data)
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)

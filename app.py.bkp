@@ -1,0 +1,236 @@
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file
+from werkzeug.security import generate_password_hash, check_password_hash
+from utils.db import get_connection
+import pandas as pd
+from io import BytesIO
+from datetime import datetime
+
+app = Flask(__name__)
+app.secret_key = 'cambia_esto_por_algo_seguro'
+
+# ---------- LOGIN ----------
+@app.route('/')
+def index():
+    return redirect(url_for('login'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        usuario = request.form['usuario'].strip()
+        password = request.form['password'].strip()
+
+        if not usuario or not password:
+            flash('Completa todos los campos', 'warning')
+            return render_template('login.html')
+
+        conn = get_connection()
+        if not conn:
+            flash('Error de conexión', 'danger')
+            return render_template('login.html')
+
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM usuarios WHERE correo = %s", (usuario,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+#        if user and check_password_hash(user['pass'], password):
+        if user and (user['pass'] == password or check_password_hash(user['pass'], password)):
+            session['user_id'] = user['id']
+            session['user_name'] = user['nombre']
+            return redirect(url_for('sistema', tab='nueva_venta'))
+        else:
+            flash('Credenciales incorrectas', 'danger')
+
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+# ---------- SISTEMA (PESTAÑAS) ----------
+@app.route('/sistema')
+def sistema():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    tab = request.args.get('tab', 'nueva_venta')
+    return render_template('sistema/index.html', tab=tab)
+
+# ---------- NUEVA VENTA ----------
+@app.route('/sistema/nueva_venta')
+def nueva_venta():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT p.codigo, p.descripcion, p.cantidad, p.precio FROM productos p")
+    productos = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('sistema/nueva_venta.html', productos=productos)
+
+# ---------- CLIENTES ----------
+@app.route('/sistema/clientes')
+def clientes():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM clientes")
+    data = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('sistema/clientes.html', clientes=data)
+
+@app.route('/sistema/clientes/agregar', methods=['POST'])
+def agregar_cliente():
+    dni = request.form['dni']
+    nombre = request.form['nombre']
+    telefono = request.form['telefono']
+    direccion = request.form['direccion']
+    razon = request.form['razon']
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO clientes (dni, nombre, telefono, direccion, razon) VALUES (%s,%s,%s,%s,%s)",
+                   (dni, nombre, telefono, direccion, razon))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    flash('Cliente agregado', 'success')
+    return redirect(url_for('clientes'))
+
+@app.route('/sistema/clientes/eliminar/<int:id>')
+def eliminar_cliente(id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM clientes WHERE id=%s", (id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    flash('Cliente eliminado', 'info')
+    return redirect(url_for('clientes'))
+
+# ---------- PROVEEDORES ----------
+@app.route('/sistema/proveedores')
+def proveedores():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM proveedor")
+    data = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('sistema/proveedores.html', proveedores=data)
+
+@app.route('/sistema/proveedores/agregar', methods=['POST'])
+def agregar_proveedor():
+    ruc = request.form['ruc']
+    nombre = request.form['nombre']
+    telefono = request.form['telefono']
+    direccion = request.form['direccion']
+    razon = request.form['razon']
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO proveedor (ruc, nombre, telefono, direccion, razon) VALUES (%s,%s,%s,%s,%s)",
+                   (ruc, nombre, telefono, direccion, razon))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    flash('Proveedor agregado', 'success')
+    return redirect(url_for('proveedores'))
+
+# ---------- PRODUCTOS ----------
+@app.route('/sistema/productos')
+def productos():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT p.*, pr.nombre AS proveedor FROM productos p JOIN proveedor pr ON p.id_proveedor = pr.id")
+    data = cursor.fetchall()
+    cursor.execute("SELECT * FROM proveedor")
+    provs = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('sistema/productos.html', productos=data, proveedores=provs)
+
+@app.route('/sistema/productos/agregar', methods=['POST'])
+def agregar_producto():
+    codigo = request.form['codigo']
+    descripcion = request.form['descripcion']
+    cantidad = request.form['cantidad']
+    precio = request.form['precio']
+    id_proveedor = request.form['proveedor']
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO productos (codigo, descripcion, cantidad, precio, id_proveedor) VALUES (%s,%s,%s,%s,%s)",
+                   (codigo, descripcion, cantidad, precio, id_proveedor))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    flash('Producto agregado', 'success')
+    return redirect(url_for('productos'))
+
+# ---------- VENTAS ----------
+@app.route('/sistema/ventas')
+def ventas():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT v.id, c.nombre AS cliente, v.total, v.fecha FROM ventas v JOIN clientes c ON v.id_cliente = c.id")
+    data = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('sistema/ventas.html', ventas=data)
+
+# ---------- REPORTES ----------
+@app.route('/sistema/reportes')
+def reportes():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT v.id, c.nombre AS cliente, v.total, v.fecha FROM ventas v JOIN clientes c ON v.id_cliente = c.id")
+    data = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('sistema/reportes.html', ventas=data)
+
+@app.route('/sistema/reportes/excel')
+def reporte_excel():
+    conn = get_connection()
+    query = "SELECT v.id, c.nombre AS cliente, v.total, v.fecha FROM ventas v JOIN clientes c ON v.id_cliente = c.id"
+    df = pd.read_sql(query, conn)
+    conn.close()
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Ventas')
+    output.seek(0)
+    return send_file(output, download_name=f"ventas_{datetime.now().strftime('%Y%m%d')}.xlsx", as_attachment=True)
+
+@app.route('/sistema/reportes/pdf')
+def reporte_pdf():
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT v.id, c.nombre AS cliente, v.total, v.fecha FROM ventas v JOIN clientes c ON v.id_cliente = c.id")
+    data = cursor.fetchall()
+    conn.close()
+
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    c.drawString(100, 750, "REPORTE DE VENTAS")
+    y = 700
+    for row in data:
+        c.drawString(100, y, f"ID: {row['id']} - Cliente: {row['cliente']} - Total: {row['total']} - Fecha: {row['fecha']}")
+        y -= 20
+    c.save()
+    buffer.seek(0)
+    return send_file(buffer, download_name=f"ventas_{datetime.now().strftime('%Y%m%d')}.pdf", as_attachment=True)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)

@@ -1,0 +1,17 @@
+<div class="mt-3">
+  <h5>Reporte de Ventas</h5>
+  <div class="mb-3">
+    <a class="btn btn-success" href="{{ url_for('reporte_excel') }}">Descargar Excel</a>
+    <a class="btn btn-danger" href="{{ url_for('reporte_pdf') }}">Descargar PDF</a>
+  </div>
+  <table class="table table-bordered">
+    <thead class="table-light"><tr><th>ID</th><th>CLIENTE</th><th>VENDEDOR</th><th>TOTAL</th></tr></thead>
+    <tbody>
+      {% for v in ventas %}
+      <tr>
+        <td>{{ v.id }}</td><td>{{ v.cliente }}</td><td>Admin</td><td>${{ v.total }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
