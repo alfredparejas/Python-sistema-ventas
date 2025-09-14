@@ -1,0 +1,80 @@
+.
+├── README.md
+├── app.py
+├── app.py.bkp
+├── hash.py
+├── requirements.txt
+├── static
+│   ├── css
+│   │   └── styles.css
+│   ├── img
+│   │   ├── Actualizar (2).png
+│   │   ├── Carrito-de-compras.png
+│   │   ├── Clientes.png
+│   │   ├── GuardarTodo.png
+│   │   ├── Nventa.png
+│   │   ├── ayuda.png
+│   │   ├── borrar.png
+│   │   ├── compras.png
+│   │   ├── config.png
+│   │   ├── eliminar.png
+│   │   ├── encabezado.png
+│   │   ├── excel.png
+│   │   ├── facebook.png
+│   │   ├── iniciar.png
+│   │   ├── instagram.png
+│   │   ├── login.jpg
+│   │   ├── logo.png
+│   │   ├── logo01.png
+│   │   ├── logo_pdf.png
+│   │   ├── lupa.png
+│   │   ├── money.png
+│   │   ├── nuevo.png
+│   │   ├── pdf.png
+│   │   ├── print.png
+│   │   ├── producto.png
+│   │   ├── proveedor.png
+│   │   ├── report.png
+│   │   ├── salir_1.png
+│   │   └── torta.png
+│   └── js
+├── structura.txt
+├── templates
+│   ├── login.html
+│   └── sistema
+│       ├── base.html
+│       ├── clientes.html
+│       ├── config.html
+│       ├── index.html
+│       ├── nueva_venta.html
+│       ├── productos.html
+│       ├── proveedores.html
+│       ├── reportes.html
+│       └── ventas.html
+├── utils
+│   ├── __pycache__
+│   │   └── db.cpython-312.pyc
+│   └── db.py
+└── venv
+    ├── bin
+    │   ├── Activate.ps1
+    │   ├── activate
+    │   ├── activate.csh
+    │   ├── activate.fish
+    │   ├── f2py
+    │   ├── flask
+    │   ├── pip
+    │   ├── pip3
+    │   ├── pip3.12
+    │   ├── python -> python3
+    │   ├── python3 -> /usr/bin/python3
+    │   └── python3.12 -> python3
+    ├── include
+    │   └── python3.12
+    ├── lib
+    │   └── python3.12
+    │       └── site-packages
+    ├── lib64 -> lib
+    └── pyvenv.cfg
+
+17 directories, 61 files
