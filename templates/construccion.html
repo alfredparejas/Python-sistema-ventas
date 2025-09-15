@@ -1,15 +1,13 @@
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <title>En construcción</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/construccion.css') }}">
-</head>
-<body>
-  <div class="msg">
-    <h1>🚧 Página en construcción 🚧</h1>
-    <p>Pronto estará disponible el resto del sistema.</p>
-    <a href="{{ url_for('logout') }}">Cerrar sesión</a>
-  </div>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}En Construcción{% endblock %}
+
+{% block content %}
+<div class="text-center">
+  <h1 class="display-4">🚧 Página en Construcción 🚧</h1>
+  <p class="lead">El módulo que buscas estará disponible pronto.</p>
+  <hr class="my-4">
+  <p>Has iniciado sesión como: <strong>{{ session.get('user_name', 'Usuario') }}</strong></p>
+  <a class="btn btn-secondary" href="{{ url_for('auth.logout') }}">Cerrar Sesión</a>
+</div>
+{% endblock %}
