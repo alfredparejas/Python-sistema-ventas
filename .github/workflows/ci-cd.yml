@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ develop, main ]
+    branches: [ aparejas-version, main ]
   pull_request:
-    branches: [ develop, main ]
+    branches: [ aparejas-version, main ]
 
 jobs:
   test:
