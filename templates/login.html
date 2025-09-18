@@ -3,13 +3,45 @@
 {% block title %}Iniciar Sesión{% endblock %}
 
 {% block content %}
+<style>
+  .card {
+    border: none;
+    border-radius: 1rem;
+    box-shadow: 0 0.5rem 1rem 0 rgba(0, 0, 0, 0.1);
+    animation: fadeIn 0.5s ease-in-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .btn-custom-green {
+    background-color: #28a745;
+    border-color: #28a745;
+    color: #fff;
+    transition: background-color 0.3s ease;
+  }
+
+  .btn-custom-green:hover {
+    background-color: #218838;
+    border-color: #1e7e34;
+  }
+</style>
+
 <div class="row justify-content-center">
   <div class="col-md-6 col-lg-4">
     <div class="card shadow-sm">
-      <div class="card-body">
+      <div class="card-body p-4">
         <div class="text-center mb-4">
           <img src="{{ url_for('static', filename='img/logo01.png') }}" alt="Logo" style="width: 80px;">
-          <h2 class="h3 mt-3">Iniciar Sesión</h2>
+          <h2 class="h3 mt-3 fw-bold">Iniciar Sesión</h2>
         </div>
         
         {% if error %}
@@ -28,7 +60,7 @@
             <input type="password" id="password" name="password" class="form-control" required>
           </div>
           <div class="d-grid">
-            <button type="submit" class="btn btn-primary">INICIAR</button>
+            <button type="submit" class="btn btn-custom-green">INICIAR</button>
           </div>
         </form>
       </div>
