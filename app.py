@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 import mysql.connector
 
 app = Flask(__name__)
@@ -60,6 +60,43 @@ def login():
 
     return render_template('login.html')
 
+# --- REGISTRO ---
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    error = None
+    if request.method == 'POST':
+        usuario = request.form.get('usuario', '').strip()
+        nombre = request.form.get('nombre', '').strip()
+        password = request.form.get('password', '').strip()
+
+        ok, msg = validar_credenciales(usuario, password)
+        if not ok:
+            return render_template('register.html', error=msg)
+
+        conn = get_conn()
+        cur = conn.cursor(dictionary=True)
+
+        # Verificar si ya existe el usuario
+        cur.execute("SELECT * FROM usuarios WHERE correo = %s", (usuario,))
+        existe = cur.fetchone()
+
+        if existe:
+            error = "El usuario ya existe"
+        else:
+            hashed_pass = generate_password_hash(password)
+            cur.execute("INSERT INTO usuarios (nombre, correo, pass) VALUES (%s, %s, %s)",
+                        (nombre, usuario, hashed_pass))
+            conn.commit()
+            flash("Registro exitoso, ahora inicia sesión.", "success")
+            cur.close()
+            conn.close()
+            return redirect(url_for('login'))
+
+        cur.close()
+        conn.close()
+
+    return render_template('register.html', error=error)
+
 @app.route('/construccion')
 def construccion():
     if 'user_id' not in session:
@@ -73,3 +110,4 @@ def logout():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
