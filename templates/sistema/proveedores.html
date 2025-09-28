@@ -7,16 +7,17 @@
     <div class="col"><input name="direccion" class="form-control" placeholder="Dirección" required></div>
     <div class="col"><input name="razon" class="form-control" placeholder="Razón Social"></div>
     <div class="col-auto"><button class="btn btn-success">Guardar</button></div>
-    <div class="col-auto"><button type="button" class="btn btn-warning">Actualizar</button></div>
-    <div class="col-auto"><button type="button" class="btn btn-danger">Eliminar</button></div>
-    <div class="col-auto"><button type="reset" class="btn btn-secondary">Nuevo</button></div>
   </form>
   <table class="table table-bordered">
-    <thead class="table-light"><tr><th>RUC</th><th>NOMBRE</th><th>TELÉFONO</th><th>DIRECCIÓN</th><th>RAZÓN</th></tr></thead>
+    <thead class="table-light"><tr><th>RUC</th><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Razón</th></tr></thead>
     <tbody>
       {% for p in proveedores %}
       <tr>
-        <td>{{ p.ruc }}</td><td>{{ p.nombre }}</td><td>{{ p.telefono }}</td><td>{{ p.direccion }}</td><td>{{ p.razon }}</td>
+        <td>{{ p.ruc }}</td>
+        <td>{{ p.nombre }}</td>
+        <td>{{ p.telefono }}</td>
+        <td>{{ p.direccion }}</td>
+        <td>{{ p.razon }}</td>
       </tr>
       {% endfor %}
     </tbody>

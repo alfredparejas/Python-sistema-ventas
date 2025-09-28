@@ -1,0 +1,27 @@
+import pytest
+from unittest.mock import patch
+from mysql.connector import Error
+
+def test_app_maneja_error_conexion_bd(client):
+    """🔴 PRUEBA 9: App no debe caerse si BD no responde"""
+    with patch('utils.db.get_connection', side_effect=Error("Connection failed")):
+        response = client.get('/login')
+        
+        # DEBE FALLAR: Puede mostrar errores técnicos al usuario
+        assert response.status_code == 200
+        # No debe mostrar detalles técnicos del error
+        assert b'connection failed' not in response.data.lower()
+        assert b'mysql' not in response.data.lower()
+
+def test_login_maneja_error_bd_gracefully(client):
+    """🔴 PRUEBA 10: Login debe manejar errores de BD adecuadamente"""
+    with patch('utils.db.get_connection', return_value=None):
+        response = client.post('/login', data={
+            'usuario': 'test@test.com',
+            'password': 'test123'
+        })
+        
+        # DEBE FALLAR: Puede no manejar el error correctamente
+        assert response.status_code == 200
+        # Debe mostrar mensaje amigable, no error técnico
+        assert b'error de conexión' in response.data.lower() or b'intente más tarde' in response.data.lower()

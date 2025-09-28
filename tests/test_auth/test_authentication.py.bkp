@@ -1,0 +1,37 @@
+import pytest
+
+def test_endpoints_criticos_requieren_autenticacion(client):
+    """🔴 PRUEBA 11: Endpoints críticos deben requerir autenticación"""
+    endpoints_criticos = [
+        '/sistema/clientes',
+        '/sistema/productos',
+        '/sistema/ventas', 
+        '/sistema/reportes',
+        '/sistema/clientes/agregar',
+        '/sistema/productos/agregar'
+    ]
+    
+    for endpoint in endpoints_criticos:
+        response = client.get(endpoint, follow_redirects=False)
+        
+        # DEBE FALLAR: Si algún endpoint no está protegido
+        assert response.status_code == 302  # Redirect to login
+        assert '/login' in response.location
+
+def test_logout_limpia_sesion_correctamente(auth_client):
+    """🔴 PRUEBA 12: Logout debe limpiar la sesión"""
+    # Verificar que tiene sesión activa
+    with auth_client.session_transaction() as session:
+        assert 'user_id' in session
+    
+    # Hacer logout
+    response = auth_client.get('/logout', follow_redirects=True)
+    
+    # Verificar que la sesión se limpió
+    with auth_client.session_transaction() as session:
+        assert 'user_id' not in session
+        assert 'user_name' not in session
+    
+    # Debe redirigir al login
+    assert response.status_code == 200
+    assert b'login' in response.data.lower()

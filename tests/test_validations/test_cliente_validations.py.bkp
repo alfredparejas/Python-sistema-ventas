@@ -1,0 +1,31 @@
+import pytest
+
+def test_cliente_valida_dni_no_vacio(auth_client, mock_db):
+    """🔴 PRUEBA 7: DNI no puede estar vacío"""
+    mock_conn, mock_cursor = mock_db
+    
+    response = auth_client.post('/sistema/clientes/agregar', data={
+        'dni': '',  # VACÍO - debería fallar
+        'nombre': 'Cliente Test',
+        'telefono': '123456789',
+        'direccion': 'Dirección Test',
+        'razon': 'Razón Test'
+    }, follow_redirects=True)
+    
+    # DEBE FALLAR: Actualmente acepta DNI vacío
+    assert b'dni' in response.data.lower() or b'requerido' in response.data.lower()
+
+def test_cliente_valida_nombre_no_vacio(auth_client, mock_db):
+    """🔴 PRUEBA 8: Nombre no puede estar vacío"""
+    mock_conn, mock_cursor = mock_db
+    
+    response = auth_client.post('/sistema/clientes/agregar', data={
+        'dni': '12345678',
+        'nombre': '',  # VACÍO - debería fallar
+        'telefono': '123456789', 
+        'direccion': 'Dirección Test',
+        'razon': 'Razón Test'
+    }, follow_redirects=True)
+    
+    # DEBE FALLAR: Actualmente acepta nombre vacío
+    assert b'nombre' in response.data.lower() or b'requerido' in response.data.lower()
