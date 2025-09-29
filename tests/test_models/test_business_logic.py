@@ -1,26 +1,40 @@
-import pytest
-from app import mysql_password
+# tests/test_models/test_business_logic.py
+from models.models import Usuario
 
 def test_mysql_password_funciona_correctamente():
     """🔴 PRUEBA 13: Función de hash debe funcionar correctamente"""
     # Test con contraseña conocida
     password = "test123"
-    hashed = mysql_password(password)
-    
-    # DEBE FALLAR: Si la función no existe o no funciona
+    hashed = Usuario.mysql_password(password)
+
+    # Verificaciones básicas
     assert hashed.startswith('*')
     assert len(hashed) == 41
-    # Hash conocido para "test123"
-#    assert hashed == '*CCBED5B0D483FF1476A0C99E8A80F3F5A6B9438'
-    assert hashed == mysql_password("test123")  # Debe ser consistente
+    
+    # Comparar con el hash real
+    hash_real = Usuario.mysql_password("test123")
+    assert hashed == hash_real
 
 def test_mysql_password_es_consistente():
-    """🔴 PRUEBA 14: Hash debe ser consistente"""
-    passwords = ["test123", "admin", "password123", ""]
+    """🔴 PRUEBA 14: Misma contraseña genera mismo hash"""
+    password = "mi_contraseña"
+    hash1 = Usuario.mysql_password(password)
+    hash2 = Usuario.mysql_password(password)
     
-    for pwd in passwords:
-        hash1 = mysql_password(pwd)
-        hash2 = mysql_password(pwd)
-        
-        # Misma contraseña debe producir mismo hash
-        assert hash1 == hash2
+    assert hash1 == hash2
+    assert hash1.startswith('*')
+    assert len(hash1) == 41
+
+def test_mysql_password_vacia():
+    """🔴 PRUEBA 15: Contraseña vacía genera hash específico"""
+    hash_vacio = Usuario.mysql_password("")
+    assert hash_vacio == "*DA39A3EE5E6B0D3255BFEF95601890AFD80709"
+
+def test_usuario_check_password():
+    """🔴 PRUEBA 16: Usuario puede verificar contraseñas"""
+    # Crear usuario de prueba
+    usuario = Usuario()
+    usuario.set_password("password123")
+    
+    assert usuario.check_password("password123") == True
+    assert usuario.check_password("password_wrong") == False

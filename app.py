@@ -88,15 +88,72 @@ def clientes():
     clientes_data = Cliente.query.order_by(Cliente.id.desc()).all()
     return render_template('sistema/index.html', tab='clientes', clientes=clientes_data)
 
+#@app.route('/sistema/clientes/agregar', methods=['POST'])
+#def agregar_cliente():
+    # ORM: Crear nuevo cliente
+#    nuevo_cliente = Cliente(
+#        dni=request.form['dni'],
+#        nombre=request.form['nombre'],
+#        telefono=request.form['telefono'],
+#        direccion=request.form['direccion'],
+#        razon=request.form['razon']
+#    )
+    
+#    try:
+#        db.session.add(nuevo_cliente)
+#        db.session.commit()
+#        flash('Cliente agregado', 'success')
+#    except Exception as e:
+#        db.session.rollback()
+#        flash('Error al agregar cliente: ' + str(e), 'danger')
+    
+#    return redirect(url_for('sistema', tab='clientes'))
+
+#@app.route('/sistema/clientes/eliminar/<int:id>')
+#def eliminar_cliente(id):
+    # ORM: Eliminar cliente por ID
+#    cliente = Cliente.query.get(id)
+#    if not cliente:
+#        flash('Cliente no encontrado', 'danger')
+#        return redirect(url_for('sistema', tab='clientes'))
+    
+#    try:
+#        db.session.delete(cliente)
+#        db.session.commit()
+#        flash('Cliente eliminado', 'info')
+#    except Exception as e:
+#        db.session.rollback()
+#        flash('Error al eliminar cliente: ' + str(e), 'danger')
+    
+#    return redirect(url_for('sistema', tab='clientes'))
+
+# En la función agregar_cliente, agrega estas validaciones:
+
 @app.route('/sistema/clientes/agregar', methods=['POST'])
 def agregar_cliente():
+    # Obtener y limpiar datos del formulario
+    dni = request.form['dni'].strip()
+    nombre = request.form['nombre'].strip()
+    telefono = request.form['telefono'].strip()
+    direccion = request.form['direccion'].strip()
+    razon = request.form['razon'].strip()
+    
+    # 🔴 AGREGAR VALIDACIONES (igual que en productos)
+    if not dni:
+        flash('El DNI del cliente es requerido', 'danger')
+        return redirect(url_for('sistema', tab='clientes'))
+    
+    if not nombre:
+        flash('El nombre del cliente es requerido', 'danger')
+        return redirect(url_for('sistema', tab='clientes'))
+    
     # ORM: Crear nuevo cliente
     nuevo_cliente = Cliente(
-        dni=request.form['dni'],
-        nombre=request.form['nombre'],
-        telefono=request.form['telefono'],
-        direccion=request.form['direccion'],
-        razon=request.form['razon']
+        dni=dni,
+        nombre=nombre,
+        telefono=telefono,
+        direccion=direccion,
+        razon=razon
     )
     
     try:
@@ -109,23 +166,8 @@ def agregar_cliente():
     
     return redirect(url_for('sistema', tab='clientes'))
 
-@app.route('/sistema/clientes/eliminar/<int:id>')
-def eliminar_cliente(id):
-    # ORM: Eliminar cliente por ID
-    cliente = Cliente.query.get(id)
-    if not cliente:
-        flash('Cliente no encontrado', 'danger')
-        return redirect(url_for('sistema', tab='clientes'))
-    
-    try:
-        db.session.delete(cliente)
-        db.session.commit()
-        flash('Cliente eliminado', 'info')
-    except Exception as e:
-        db.session.rollback()
-        flash('Error al eliminar cliente: ' + str(e), 'danger')
-    
-    return redirect(url_for('sistema', tab='clientes'))
+
+
 
 # ========== PROVEEDORES CON ORM ==========
 @app.route('/sistema/proveedores')

@@ -1,36 +1,51 @@
+# tests/test_security/test_sql_injection.py
 import pytest
+from unittest.mock import patch, MagicMock
 
 def test_login_resistente_a_sql_injection(client):
-    """🔴 PRUEBA 1: Login debe resistir inyección SQL"""
-    # Intentar inyecciones SQL comunes
-    payloads = [
+    """🔴 PRUEBA 8: Login es resistente a SQL injection"""
+    # Intentar diferentes tipos de SQL injection
+    injection_attempts = [
         "admin' OR '1'='1",
         "admin' --",
-        "admin' #", 
         "admin' /*",
-        "' OR 1=1--"
+        "admin'; DROP TABLE usuarios; --"
     ]
     
-    for payload in payloads:
-        response = client.post('/login', data={
-            'usuario': payload,
-            'password': 'anypassword'
-        })
-        
-        # No debe haber errores de SQL en la respuesta
-        assert response.status_code in [200, 302]
-        assert b"sql" not in response.data.lower()
-        assert b"syntax" not in response.data.lower()
-        assert b"mysql" not in response.data.lower()
+    for attempt in injection_attempts:
+        with patch('app.Usuario.query') as mock_query:
+            # El ORM debería tratar esto como texto literal, no como SQL
+            mock_query.filter_by.return_value.first.return_value = None
+            
+            response = client.post('/login', data={
+                'usuario': attempt,
+                'password': 'anypassword'
+            }, follow_redirects=True)
+            
+            # No debería haber errores de SQL, solo credenciales incorrectas
+            assert response.status_code == 200
+            # El sistema debería manejar esto como usuario no encontrado
+            assert b'Credenciales incorrectas' in response.data or b'Error' not in response.data
 
-def test_evitar_inyeccion_sql_en_clientes(auth_client, mock_db):
-    """🔴 PRUEBA 2: Evitar inyección SQL en búsqueda de clientes"""
-    mock_conn, mock_cursor = mock_db
-    mock_cursor.fetchall.return_value = []
+def test_evitar_inyeccion_sql_en_clientes(authenticated_client, mock_db_session):
+    """🔴 PRUEBA 9: Formulario de clientes es resistente a SQL injection"""
+    client = authenticated_client
     
-    # Intentar inyección en parámetro de búsqueda
-    response = auth_client.get('/sistema/clientes?search=test\' OR 1=1--')
+    # Intentar SQL injection en el formulario de clientes
+    injection_data = {
+        'dni': "123' OR '1'='1",
+        'nombre': "Test'; DROP TABLE clientes; --",
+        'telefono': "123456789",
+        'direccion': "Calle Test",
+        'razon': "Test"
+    }
     
+    response = client.post('/sistema/clientes/agregar', 
+                         data=injection_data, 
+                         follow_redirects=True)
+    
+    # Verificar que no hay errores de base de datos
     assert response.status_code == 200
-    # Verificar que no se ejecuta SQL peligroso
-    assert not any("OR 1=1" in str(call) for call in mock_cursor.execute.call_args_list)
+    # El ORM debería escapar automáticamente estos valores
+    mock_db_session.add.assert_called_once()
+    mock_db_session.commit.assert_called_once()

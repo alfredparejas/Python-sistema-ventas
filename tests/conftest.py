@@ -1,36 +1,58 @@
-import pytest
-import sys
+# tests/conftest.py
 import os
-from unittest.mock import Mock, patch
+import sys
+import pytest
 
 # Agregar el directorio raíz al path de Python
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app import app as flask_app
+from models.models import db
+from unittest.mock import patch, MagicMock
 
 @pytest.fixture
-def client():
-    """Fixture para cliente de pruebas Flask"""
-    from app import app
-    app.config['TESTING'] = True
-    app.config['WTF_CSRF_ENABLED'] = False
-    app.config['SECRET_KEY'] = 'test-secret-key'
+def app():
+    """Fixture para la aplicación Flask"""
+    flask_app.config['TESTING'] = True
+    flask_app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+    flask_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    flask_app.config['WTF_CSRF_ENABLED'] = False  # Deshabilitar CSRF para tests
     
-    with app.test_client() as client:
-        yield client
+    with flask_app.app_context():
+        yield flask_app
 
 @pytest.fixture
-def auth_client(client):
+def client(app):
+    """Fixture para el cliente de测试"""
+    return app.test_client()
+
+@pytest.fixture
+def mock_db_session():
+    """Mock de la sesión de base de datos para ORM"""
+    with patch('app.db.session') as mock_session:
+        mock_commit = MagicMock()
+        mock_session.commit = mock_commit
+        mock_add = MagicMock()
+        mock_session.add = mock_add
+        mock_session.rollback = MagicMock()
+        yield mock_session
+
+@pytest.fixture
+def mock_usuario():
+    """Mock de usuario para tests de autenticación"""
+    with patch('app.Usuario.query') as mock_query:
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.nombre = "Test User"
+        mock_user.correo = "test@example.com"
+        mock_user.check_password.return_value = True
+        mock_query.filter_by.return_value.first.return_value = mock_user
+        yield mock_query
+
+@pytest.fixture
+def authenticated_client(client):
     """Cliente con sesión autenticada"""
-    with client.session_transaction() as session:
-        session['user_id'] = 1
-        session['user_name'] = 'Test User'
+    with client.session_transaction() as sess:
+        sess['user_id'] = 1
+        sess['user_name'] = 'Test User'
     return client
-
-@pytest.fixture
-def mock_db():
-    """Mock de la base de datos"""
-    with patch('utils.db.get_connection') as mock:
-        mock_conn = Mock()
-        mock_cursor = Mock()
-        mock_conn.cursor.return_value = mock_cursor
-        mock.return_value = mock_conn
-        yield mock_conn, mock_cursor

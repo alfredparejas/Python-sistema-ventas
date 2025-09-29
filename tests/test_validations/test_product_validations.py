@@ -1,98 +1,72 @@
+# tests/test_validations/test_product_validations.py
 import pytest
 
-def test_producto_no_acepta_codigo_vacio(auth_client, mock_db):
-    """🔴 PRUEBA 3: Producto no debe aceptar código vacío"""
-    mock_conn, mock_cursor = mock_db
+def test_producto_no_acepta_codigo_vacio(authenticated_client):
+    """🔴 PRUEBA 12: Producto valida código no vacío"""
+    client = authenticated_client
     
-    response = auth_client.post('/sistema/productos/agregar', data={
-        'codigo': '',  # VACÍO - debería fallar
-        'descripcion': 'Producto Test',
+    response = client.post('/sistema/productos/agregar', data={
+        'codigo': '',  # código vacío
+        'descripcion': 'Producto test',
         'cantidad': '10',
         'precio': '100',
         'proveedor': '1'
     }, follow_redirects=True)
     
-    # CORREGIDO: Usar solo ASCII en cadenas bytes
-    assert b'codigo' in response.data.lower() or b'requerido' in response.data.lower()
-    # No debe llamar a la base de datos si la validación falla
-    assert not mock_cursor.execute.called
+    assert b'El c\xc3\xb3digo del producto es requerido' in response.data
 
-def test_producto_no_acepta_precio_negativo(auth_client, mock_db):
-    """🔴 PRUEBA 4: No debe aceptar precios negativos"""
-    mock_conn, mock_cursor = mock_db
+def test_producto_no_acepta_precio_negativo(authenticated_client):
+    """🔴 PRUEBA 13: Producto valida precio no negativo"""
+    client = authenticated_client
     
-    response = auth_client.post('/sistema/productos/agregar', data={
-        'codigo': 'TEST123',
-        'descripcion': 'Producto Test',
+    response = client.post('/sistema/productos/agregar', data={
+        'codigo': 'TEST001',
+        'descripcion': 'Producto test',
         'cantidad': '10',
-        'precio': '-100',  # NEGATIVO - debería fallar
+        'precio': '-100',  # precio negativo
         'proveedor': '1'
     }, follow_redirects=True)
     
-    # CORREGIDO: Usar solo ASCII
-    assert b'precio' in response.data.lower() and b'negativo' in response.data.lower()
-    assert not mock_cursor.execute.called
+    assert b'El precio no puede ser negativo' in response.data
 
-
-def test_producto_no_acepta_stock_negativo(auth_client, mock_db):
-    """🔴 PRUEBA 5: Stock no puede ser negativo"""
-    mock_conn, mock_cursor = mock_db
-
-    response = auth_client.post('/sistema/productos/agregar', data={
-        'codigo': 'TEST123',
-        'descripcion': 'Producto Test',
-        'cantidad': '-5',  # NEGATIVO - debería fallar
+def test_producto_no_acepta_stock_negativo(authenticated_client):
+    """🔴 PRUEBA 14: Producto valida stock no negativo"""
+    client = authenticated_client
+    
+    response = client.post('/sistema/productos/agregar', data={
+        'codigo': 'TEST001',
+        'descripcion': 'Producto test',
+        'cantidad': '-5',  # stock negativo
         'precio': '100',
         'proveedor': '1'
     }, follow_redirects=True)
+    
+    assert b'La cantidad no puede ser negativa' in response.data
 
-    # ACTUALIZAR: Buscar mensajes específicos de error
-    assert b'cantidad' in response.data.lower() or b'negativa' in response.data.lower()
-
-def test_producto_valida_precio_numerico(auth_client, mock_db):
-    """🔴 PRUEBA 6: Precio debe ser numérico"""
-    mock_conn, mock_cursor = mock_db
-
-    response = auth_client.post('/sistema/productos/agregar', data={
-        'codigo': 'TEST123',
-        'descripcion': 'Producto Test',
+def test_producto_valida_precio_numerico(authenticated_client):
+    """🔴 PRUEBA 15: Producto valida que precio sea numérico"""
+    client = authenticated_client
+    
+    response = client.post('/sistema/productos/agregar', data={
+        'codigo': 'TEST001',
+        'descripcion': 'Producto test',
         'cantidad': '10',
-        'precio': 'precio_invalido',  # TEXTO - debería fallar
+        'precio': 'precio_invalido',  # precio no numérico
         'proveedor': '1'
     }, follow_redirects=True)
-
-    # ACTUALIZAR: Buscar mensajes específicos de error
-    assert b'precio' in response.data.lower() or b'numero' in response.data.lower()
-
-
-#def test_producto_no_acepta_stock_negativo(auth_client, mock_db):
-#    """🔴 PRUEBA 5: Stock no puede ser negativo"""
-#    mock_conn, mock_cursor = mock_db
     
-#    response = auth_client.post('/sistema/productos/agregar', data={
-#        'codigo': 'TEST123',
-#        'descripcion': 'Producto Test', 
-#        'cantidad': '-5',  # NEGATIVO - debería fallar
-#        'precio': '100',
-#        'proveedor': '1'
-#    }, follow_redirects=True)
-    
-    # CORREGIDO: Usar solo ASCII
-#    assert b'cantidad' in response.data.lower() and b'negativo' in response.data.lower()
-#    assert not mock_cursor.execute.called
+    assert b'El precio debe ser un n\xc3\xbamero v\xc3\xa1lido' in response.data
 
-
-#def test_producto_valida_precio_numerico(auth_client, mock_db):
-#    """🔴 PRUEBA 6: Precio debe ser numérico"""
-#    mock_conn, mock_cursor = mock_db
+def test_producto_valida_descripcion_no_vacia(authenticated_client):
+    """🔴 PRUEBA 16: Producto valida descripción no vacía"""
+    client = authenticated_client
     
-#    response = auth_client.post('/sistema/productos/agregar', data={
-#        'codigo': 'TEST123',
-#        'descripcion': 'Producto Test',
-#        'cantidad': '10',
-#        'precio': 'precio_invalido',  # TEXTO - debería fallar
-#        'proveedor': '1'
-#    }, follow_redirects=True)
+    response = client.post('/sistema/productos/agregar', data={
+        'codigo': 'TEST001',
+        'descripcion': '',  # descripción vacía
+        'cantidad': '10',
+        'precio': '100',
+        'proveedor': '1'
+    }, follow_redirects=True)
     
-    # CORREGIDO: Usar solo ASCII
-#    assert b'numero' in response.data.lower() or b'valido' in response.data.lower()
+    assert b'La descripci\xc3\xb3n del producto es requerida' in response.data
