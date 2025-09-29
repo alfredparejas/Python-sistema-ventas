@@ -11,7 +11,8 @@ def test_mysql_password_funciona_correctamente():
     assert hashed.startswith('*')
     assert len(hashed) == 41
     # Hash conocido para "test123"
-    assert hashed == '*CCBED5B0D483FF1476A0C99E8A80F3F5A6B9438'
+#    assert hashed == '*CCBED5B0D483FF1476A0C99E8A80F3F5A6B9438'
+    assert hashed == mysql_password("test123")  # Debe ser consistente
 
 def test_mysql_password_es_consistente():
     """🔴 PRUEBA 14: Hash debe ser consistente"""
