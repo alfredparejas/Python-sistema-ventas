@@ -1,23 +1,16 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file
-from utils.db import get_connection
-from io import BytesIO
+# app.py
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+from utils.db import init_db
+from models.models import db, Usuario, Cliente, Proveedor, Producto, Venta
 from datetime import datetime
-import hashlib
 
 app = Flask(__name__)
 app.secret_key = 'cambia_esto_por_algo_seguro'
 
-# ---------- FUNCIÓN AUXILIAR: HASH PASSWORD ----------
-def mysql_password(raw: str) -> str:
-    """Devuelve el mismo hash que MySQL PASSWORD('texto')"""
-    if not raw:
-        return "*DA39A3EE5E6B0D3255BFEF95601890AFD80709"
-    
-    hash1 = hashlib.sha1(raw.encode('utf-8')).digest()
-    hash2 = hashlib.sha1(hash1).hexdigest()
-    return "*" + hash2.upper()
+# Inicializar la base de datos
+init_db(app)
 
-# ---------- RUTAS DE AUTENTICACIÓN ----------
+# ========== RUTAS DE AUTENTICACIÓN CON ORM ==========
 @app.route('/')
 def index():
     return redirect(url_for('login'))
@@ -32,23 +25,19 @@ def login():
             flash('Completa todos los campos', 'warning')
             return render_template('login.html')
 
-        conn = get_connection()
-        if not conn:
-            flash('Error de conexión', 'danger')
-            return render_template('login.html')
-
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM usuarios WHERE correo = %s", (usuario,))
-        user = cursor.fetchone()
-        cursor.close()
-        conn.close()
-
-        if user and user['pass'] == mysql_password(password):
-            session['user_id'] = user['id']
-            session['user_name'] = user['nombre']
-            return redirect(url_for('sistema', tab='nueva_venta'))
-        else:
-            flash('Credenciales incorrectas', 'danger')
+        try:
+            # ORM: Buscar usuario por correo
+            user = Usuario.query.filter_by(correo=usuario).first()
+            
+            if user and user.check_password(password):
+                session['user_id'] = user.id
+                session['user_name'] = user.nombre
+                return redirect(url_for('sistema', tab='nueva_venta'))
+            else:
+                flash('Credenciales incorrectas', 'danger')
+                
+        except Exception as e:
+            flash('Error de conexión a la base de datos', 'danger')
 
     return render_template('login.html')
 
@@ -57,7 +46,7 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# ---------- RUTA PRINCIPAL DEL SISTEMA ----------
+# ========== RUTA PRINCIPAL DEL SISTEMA ==========
 @app.route('/sistema')
 def sistema():
     if 'user_id' not in session:
@@ -65,143 +54,151 @@ def sistema():
     
     tab = request.args.get('tab', 'nueva_venta')
     
-    # Redirigir a la función correspondiente según la pestaña
-    if tab == 'proveedores':
-        return proveedores()
-    elif tab == 'productos':
-        return productos()
-    elif tab == 'clientes':
-        return clientes()
-    elif tab == 'ventas':
-        return ventas()
-    elif tab == 'reportes':
-        return reportes()
+    tab_handlers = {
+        'proveedores': proveedores,
+        'productos': productos,
+        'clientes': clientes,
+        'ventas': ventas,
+        'reportes': reportes
+    }
     
-    # Para 'nueva_venta' y cualquier otra pestaña no específica
+    handler = tab_handlers.get(tab)
+    if handler:
+        return handler()
+    
     return render_template('sistema/index.html', tab=tab)
 
-# ---------- NUEVA VENTA ----------
+# ========== NUEVA VENTA CON ORM ==========
 @app.route('/sistema/nueva_venta')
 def nueva_venta():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT p.codigo, p.descripcion, p.cantidad, p.precio FROM productos p")
-    productos = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    
+    # ORM: Obtener todos los productos
+    productos = Producto.query.all()
     return render_template('sistema/index.html', tab='nueva_venta', productos=productos)
 
-# ---------- CLIENTES ----------
+# ========== CLIENTES CON ORM ==========
 @app.route('/sistema/clientes')
 def clientes():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM clientes ORDER BY id DESC")
-    data = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    
-    return render_template('sistema/index.html', tab='clientes', clientes=data)
+    # ORM: Obtener clientes ordenados por ID descendente
+    clientes_data = Cliente.query.order_by(Cliente.id.desc()).all()
+    return render_template('sistema/index.html', tab='clientes', clientes=clientes_data)
 
 @app.route('/sistema/clientes/agregar', methods=['POST'])
 def agregar_cliente():
-    dni = request.form['dni']
-    nombre = request.form['nombre']
-    telefono = request.form['telefono']
-    direccion = request.form['direccion']
-    razon = request.form['razon']
+    # ORM: Crear nuevo cliente
+    nuevo_cliente = Cliente(
+        dni=request.form['dni'],
+        nombre=request.form['nombre'],
+        telefono=request.form['telefono'],
+        direccion=request.form['direccion'],
+        razon=request.form['razon']
+    )
     
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO clientes (dni, nombre, telefono, direccion, razon) VALUES (%s,%s,%s,%s,%s)",
-                   (dni, nombre, telefono, direccion, razon))
-    conn.commit()
-    cursor.close()
-    conn.close()
+    try:
+        db.session.add(nuevo_cliente)
+        db.session.commit()
+        flash('Cliente agregado', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('Error al agregar cliente: ' + str(e), 'danger')
     
-    flash('Cliente agregado', 'success')
     return redirect(url_for('sistema', tab='clientes'))
 
 @app.route('/sistema/clientes/eliminar/<int:id>')
 def eliminar_cliente(id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM clientes WHERE id=%s", (id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
+    # ORM: Eliminar cliente por ID
+    cliente = Cliente.query.get(id)
+    if not cliente:
+        flash('Cliente no encontrado', 'danger')
+        return redirect(url_for('sistema', tab='clientes'))
     
-    flash('Cliente eliminado', 'info')
+    try:
+        db.session.delete(cliente)
+        db.session.commit()
+        flash('Cliente eliminado', 'info')
+    except Exception as e:
+        db.session.rollback()
+        flash('Error al eliminar cliente: ' + str(e), 'danger')
+    
     return redirect(url_for('sistema', tab='clientes'))
 
-# ---------- PROVEEDORES ----------
+# ========== PROVEEDORES CON ORM ==========
 @app.route('/sistema/proveedores')
 def proveedores():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM proveedor ORDER BY id DESC")
-    data = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    
-    return render_template('sistema/index.html', tab='proveedores', proveedores=data)
+    # ORM: Obtener proveedores ordenados por ID descendente
+    proveedores_data = Proveedor.query.order_by(Proveedor.id.desc()).all()
+    return render_template('sistema/index.html', tab='proveedores', proveedores=proveedores_data)
 
 @app.route('/sistema/proveedores/agregar', methods=['POST'])
 def agregar_proveedor():
-    ruc = request.form['ruc']
-    nombre = request.form['nombre']
-    telefono = request.form['telefono']
-    direccion = request.form['direccion']
-    razon = request.form['razon']
+    # ORM: Crear nuevo proveedor
+    nuevo_proveedor = Proveedor(
+        ruc=request.form['ruc'],
+        nombre=request.form['nombre'],
+        telefono=request.form['telefono'],
+        direccion=request.form['direccion'],
+        razon=request.form['razon']
+    )
     
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO proveedor (ruc,nombre,telefono,direccion,razon) VALUES (%s,%s,%s,%s,%s)",
-                   (ruc, nombre, telefono, direccion, razon))
-    conn.commit()
-    cursor.close()
-    conn.close()
+    try:
+        db.session.add(nuevo_proveedor)
+        db.session.commit()
+        flash('Proveedor agregado', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('Error al agregar proveedor: ' + str(e), 'danger')
     
-    flash('Proveedor agregado', 'success')
     return redirect(url_for('sistema', tab='proveedores'))
 
-# ---------- PRODUCTOS ----------
+# ========== PRODUCTOS CON ORM ==========
 @app.route('/sistema/productos')
 def productos():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT p.*, pr.nombre AS proveedor FROM productos p JOIN proveedor pr ON p.id_proveedor = pr.id ORDER BY p.id DESC")
-    data = cursor.fetchall()
-    cursor.execute("SELECT id,nombre FROM proveedor ORDER BY nombre")
-    provs = cursor.fetchall()
-    cursor.close()
-    conn.close()
+    # ORM: Obtener productos con información del proveedor usando join
+    productos_data = db.session.query(
+        Producto, Proveedor.nombre
+    ).join(
+        Proveedor, Producto.id_proveedor == Proveedor.id
+    ).order_by(Producto.id.desc()).all()
     
-    return render_template('sistema/index.html', tab='productos', productos=data, proveedores=provs)
+    # Reestructurar datos para compatibilidad con el template
+    productos_formateados = []
+    for producto, proveedor_nombre in productos_data:
+        productos_formateados.append({
+            'id': producto.id,
+            'codigo': producto.codigo,
+            'descripcion': producto.descripcion,
+            'cantidad': producto.cantidad,
+            'precio': producto.precio,
+            'id_proveedor': producto.id_proveedor,
+            'proveedor': proveedor_nombre
+        })
+    
+    # ORM: Obtener lista de proveedores
+    proveedores_lista = Proveedor.query.order_by(Proveedor.nombre).all()
+    
+    return render_template('sistema/index.html', tab='productos', 
+                         productos=productos_formateados, proveedores=proveedores_lista)
 
 @app.route('/sistema/productos/agregar', methods=['POST'])
 def agregar_producto():
-    # Obtener y limpiar datos del formulario
+    # Validaciones
     codigo = request.form['codigo'].strip()
     descripcion = request.form['descripcion'].strip()
     cantidad_str = request.form['cantidad'].strip()
     precio_str = request.form['precio'].strip()
     id_proveedor = request.form['proveedor'].strip()
     
-    # Validaciones
     if not codigo:
         flash('El código del producto es requerido', 'danger')
         return redirect(url_for('sistema', tab='productos'))
@@ -228,56 +225,74 @@ def agregar_producto():
         flash('La cantidad debe ser un número entero válido', 'danger')
         return redirect(url_for('sistema', tab='productos'))
     
-    # Guardar en base de datos
-    conn = get_connection()
-    if not conn:
-        flash('Error de conexión a la base de datos', 'danger')
-        return redirect(url_for('sistema', tab='productos'))
-        
-    cursor = conn.cursor()
+    # ORM: Crear nuevo producto
+    nuevo_producto = Producto(
+        codigo=codigo,
+        descripcion=descripcion,
+        cantidad=cantidad,
+        precio=precio,
+        id_proveedor=id_proveedor
+    )
+    
     try:
-        cursor.execute("INSERT INTO productos (codigo,descripcion,cantidad,precio,id_proveedor) VALUES (%s,%s,%s,%s,%s)",
-                       (codigo, descripcion, cantidad, precio, id_proveedor))
-        conn.commit()
+        db.session.add(nuevo_producto)
+        db.session.commit()
         flash('Producto agregado correctamente', 'success')
     except Exception as e:
-        conn.rollback()
+        db.session.rollback()
         flash('Error al guardar el producto: ' + str(e), 'danger')
-    finally:
-        cursor.close()
-        conn.close()
     
     return redirect(url_for('sistema', tab='productos'))
 
-# ---------- VENTAS ----------
+# ========== VENTAS CON ORM ==========
 @app.route('/sistema/ventas')
 def ventas():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT v.id, c.nombre AS cliente, v.total, v.fecha FROM ventas v JOIN clientes c ON v.id_cliente = c.id ORDER BY v.id DESC")
-    data = cursor.fetchall()
-    cursor.close()
-    conn.close()
+    # ORM: Obtener ventas con información del cliente
+    ventas_data = db.session.query(
+        Venta, Cliente.nombre
+    ).join(
+        Cliente, Venta.id_cliente == Cliente.id
+    ).order_by(Venta.id.desc()).all()
     
-    return render_template('sistema/index.html', tab='ventas', ventas=data)
+    # Reestructurar datos para compatibilidad con el template
+    ventas_formateadas = []
+    for venta, cliente_nombre in ventas_data:
+        ventas_formateadas.append({
+            'id': venta.id,
+            'cliente': cliente_nombre,
+            'total': venta.total,
+            'fecha': venta.fecha
+        })
+    
+    return render_template('sistema/index.html', tab='ventas', ventas=ventas_formateadas)
 
-# ---------- REPORTES ----------
+# ========== REPORTES CON ORM ==========
 @app.route('/sistema/reportes')
 def reportes():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT v.id, c.nombre AS cliente, v.total, v.fecha FROM ventas v JOIN clientes c ON v.id_cliente = c.id ORDER BY v.id DESC")
-    data = cursor.fetchall()
-    cursor.close()
-    conn.close()
+    # ORM: Obtener ventas para reportes
+    ventas_data = db.session.query(
+        Venta, Cliente.nombre
+    ).join(
+        Cliente, Venta.id_cliente == Cliente.id
+    ).order_by(Venta.id.desc()).all()
     
-    return render_template('sistema/index.html', tab='reportes', ventas=data)
+    # Reestructurar datos para compatibilidad con el template
+    ventas_formateadas = []
+    for venta, cliente_nombre in ventas_data:
+        ventas_formateadas.append({
+            'id': venta.id,
+            'cliente': cliente_nombre,
+            'total': venta.total,
+            'fecha': venta.fecha
+        })
+    
+    return render_template('sistema/index.html', tab='reportes', ventas=ventas_formateadas)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
